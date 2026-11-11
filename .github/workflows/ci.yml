@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt pyflakes
+
+      - name: Verificar código (pyflakes)
+        run: python -m pyflakes .
+
+      - name: Testes (pytest, sem acesso à internet)
+        run: python -m pytest -q
+
+      - name: O app abre sem erros
+        run: |
+          python - <<'EOF'
+          from unittest import mock
+          from streamlit.testing.v1 import AppTest
+          from clima import api
+
+          # a API é simulada: o CI não depende da Open-Meteo estar no ar
+          with mock.patch.object(api, "_get", side_effect=RuntimeError("sem rede (CI)")):
+              at = AppTest.from_file("app.py", default_timeout=60).run()
+          assert not at.exception, [e.value for e in at.exception]
+          print("app abriu sem exceções")
+          EOF
